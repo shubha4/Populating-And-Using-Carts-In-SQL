@@ -1,63 +1,57 @@
 --Creating and using database
 
---CREATE DATABASE stri_populating_carts
+CREATE DATABASE stri_populating_carts
 USE stri_populating_carts
+GO
 
 --Creating Tables
 
-CREATE TABLE tblCUSTOMER
-(CustomerID INT identity(1,1) primary key,
-Fname varchar(50),
-Lname varchar(50),
-BirthDate date)
-
-CREATE TABLE tblORDER
-(OrderID INT identity(1,1) primary key,
-OrderDate date not null,
-CustomerID int FOREIGN KEY REFERENCES tblCUSTOMER(CustomerID) not null)
-
-CREATE TABLE tblPRODUCT_TYPE
-(ProductTypeID INT identity(1,1) primary key,
-ProductTypeName varchar(60),
-ProductTypeDescr varchar(225))
-
-CREATE TABLE tblPRODUCT
-(ProductID INT identity(1,1) primary key,
-ProductName varchar(100),
-ProductTypeID int FOREIGN KEY REFERENCES tblPRODUCT_TYPE(ProductTypeID) not null,
-Price numeric(8,2),
-ProductDescr varchar(225))
-
-CREATE TABLE tblORDER_PRODUCT
-(OrderProdID INT identity(1,1) primary key,
-OrderID int FOREIGN KEY REFERENCES tblORDER(OrderID) not null,
-ProductID int FOREIGN KEY REFERENCES tblPRODUCT(ProductID) not null,
-Quantity int)
-
-CREATE TABLE tblCART
-(CartID INT identity(1,1) primary key,
-CustomerID int FOREIGN KEY REFERENCES tblCUSTOMER(CustomerID) not null,
-ProductID int FOREIGN KEY REFERENCES tblPRODUCT(ProductID) not null,
-Quantity int not null,
-CartDate date not null)
+CREATE TABLE tblCUSTOMER (
+    CustomerID INT identity(1,1) primary key,
+    Fname varchar(30),
+    Lname varchar(30),
+    BirthDate date
+)
 GO
 
---Procedures for getting customer and product IDs
-
-CREATE PROCEDURE stri_GetCustomerID
-@F VARCHAR(50),
-@L VARCHAR(50),
-@DOB Date,
-@C_ID INT OUTPUT
-AS
-SET @C_ID = (Select CustomerID From tblCUSTOMER Where Fname = @F And Lname = @L And BirthDate = @DOB)
+CREATE TABLE tblPRODUCT_TYPE (
+    ProductTypeID INT identity(1,1) primary key,
+    ProductTypeName varchar(50),
+    ProductTypeDescr varchar(255)
+)
 GO
 
-CREATE PROCEDURE stri_GetProductID
-@P VARCHAR(100),
-@P_ID INT OUTPUT
-AS
-SET @P_ID = (Select ProductID From tblPRODUCT Where ProductName = @P)
+CREATE TABLE tblPRODUCT (
+    ProductID INT identity(1,1) primary key,
+    ProductName varchar(50),
+    ProductTypeID int FOREIGN KEY REFERENCES tblPRODUCT_TYPE(ProductTypeID) not null,
+    Price numeric(6,2),
+    ProductDescr varchar(255)
+)
+GO
+
+CREATE TABLE tblORDER (
+    OrderID INT identity(1,1) primary key,
+    OrderDate date not null,
+    CustomerID int FOREIGN KEY REFERENCES tblCUSTOMER(CustomerID) not null
+)
+GO
+
+CREATE TABLE tblORDER_PRODUCT (
+    OrderProdID INT identity(1,1) primary key,
+    OrderID int FOREIGN KEY REFERENCES tblORDER(OrderID) not null,
+    ProductID int FOREIGN KEY REFERENCES tblPRODUCT(ProductID) not null,
+    Quantity int not null
+)
+GO
+
+CREATE TABLE tblCART (
+    CartID INT identity(1,1) primary key,
+    CustomerID int FOREIGN KEY REFERENCES tblCUSTOMER(CustomerID) not null,
+    ProductID int FOREIGN KEY REFERENCES tblPRODUCT(ProductID) not null,
+    Quantity int not null,
+    CartDate date not null
+)
 GO
 
 --Inserting into the tables
@@ -65,7 +59,7 @@ GO
 INSERT INTO tblCUSTOMER (Fname, Lname, BirthDate)
 SELECT Top 100 CustomerFname, CustomerLname, DateOfBirth
 FROM PEEPS.dbo.tblCUSTOMER
-WHERE YEAR(DateOfBirth) > 1985
+GO
 
 INSERT INTO tblPRODUCT_TYPE (ProductTypeName)
 VALUES ('Dairy'),('Bread'), ('Frozen')
@@ -78,9 +72,27 @@ VALUES ('Milk',(Select ProductTypeID From tblPRODUCT_TYPE Where ProductTypeName 
 ('Buns', (Select ProductTypeID From tblPRODUCT_TYPE Where ProductTypeName = 'Bread'), 8.85)
 GO
 
---Procedure to insert into tblCART
+--Stored Procedures for getting customer and product IDs
 
-CREATE PROCEDURE stri_InsertCart
+CREATE PROCEDURE GetCustomerID
+@F VARCHAR(30),
+@L VARCHAR(30),
+@DOB Date,
+@C_ID INT OUTPUT
+AS
+SET @C_ID = (Select CustomerID From tblCUSTOMER Where Fname = @F And Lname = @L And BirthDate = @DOB)
+GO
+
+CREATE PROCEDURE GetProductID
+@P VARCHAR(50),
+@P_ID INT OUTPUT
+AS
+SET @P_ID = (Select ProductID From tblPRODUCT Where ProductName = @P)
+GO
+
+--Stored Procedure to insert into tblCART
+
+CREATE PROCEDURE InsertCart
 @FN VARCHAR(50),
 @LN VARCHAR(50),
 @Birth date,
@@ -91,7 +103,7 @@ CREATE PROCEDURE stri_InsertCart
 AS
 DECLARE @Cust_ID INT, @Prod_ID INT
 
-EXEC stri_GetCustomerID
+EXEC GetCustomerID
 @F = @FN,
 @L = @LN,
 @DOB = @Birth,
@@ -100,53 +112,84 @@ EXEC stri_GetCustomerID
 If @Cust_ID is null
     BEGIN
         Print '@Cust_ID is empty, check spelling';
-        Throw 54378, '@Cust_ID cannot be null',1;
+        Throw 54378, '@Cust_ID cannot be null', 1;
     END
 
-EXEC stri_GetProductID
+EXEC GetProductID
 @P = @Prod,
 @P_ID = @Prod_ID OUTPUT
 
 If @Prod_ID is null
     BEGIN
         Print '@Prod_ID is empty, check spelling';
-        Throw 54378, '@Prod_ID cannot be null',1;
+        Throw 54378, '@Prod_ID cannot be null', 1;
     END
 
 BEGIN TRANSACTION T1
-INSERT INTO tblCART(CustomerID, ProductID, Quantity, CartDate)
-VALUES (@Cust_ID, @Prod_ID, @Quan, @Date)
+    INSERT INTO tblCART(CustomerID, ProductID, Quantity, CartDate)
+    VALUES (@Cust_ID, @Prod_ID, @Quan, @Date)
 
-If @@TRANCOUNT <> 1
-    BEGIN
-        Print '@@Trancount <> 1; check process'
-        ROLLBACK TRANSACTION T1
-    END
-ELSE
-    COMMIT TRANSACTION T1
-
-EXEC stri_InsertCart
-@FN = 'Mikki',
-@LN = 'Vallero',
-@Birth = '1986-01-15',
-@Prod = 'Buns',
-@Quan = '3',
-@Date = '04-22-2022'
+    If @@ERROR <> 0
+        BEGIN
+            Print '@@Error <> 0; check process'
+            ROLLBACK TRANSACTION T1
+        END
+    ELSE
+        COMMIT TRANSACTION T1
 GO
 
---Procedure to Checkout
-CREATE PROCEDURE stri_Checkout
-@FName VARCHAR(50),
-@LName VARCHAR(50),
-@BirthDay date,
-@CheckoutDate date
-AS 
-DECLARE @Cu_ID INT
+--Synthetic Transaction to insert values into tblCART
 
-EXEC stri_GetCustomerID
-@F = @FName,
-@L = @LName,
-@DOB = @BirthDay,
+CREATE PROCEDURE WRAPPER_InsertCart
+@Run INT
+AS
+
+DECLARE @C_Fname varchar(30), @C_Lname varchar(30), @C_DOB date, @ProdName varchar(50), @Quant INT, @CartDate date 
+DECLARE @CustPK INT, @ProdPK INT 
+DECLARE @C_Count INT = (SELECT COUNT(*) FROM tblCUSTOMER)
+DECLARE @P_Count INT = (SELECT COUNT(*) FROM tblPRODUCT)
+
+WHILE @Run > 0
+BEGIN
+    SET @CustPK = (SELECT RAND() * @C_Count + 1)
+    SET @ProdPK = (SELECT RAND() * @P_Count + 1)
+
+    SET @C_Fname = (SELECT Fname FROM tblCUSTOMER WHERE CustomerID = @CustPK)
+    SET @C_Lname = (SELECT Lname FROM tblCUSTOMER WHERE CustomerID = @CustPK)
+    SET @C_DOB = (SELECT BirthDate FROM tblCUSTOMER WHERE CustomerID = @CustPK)
+    SET @ProdName = (SELECT ProductName FROM tblPRODUCT WHERE ProductID = @ProdPK)
+    SET @Quant = (SELECT Rand() * 10 + 1)
+    SET @CartDate = (SELECT GetDate() - (SELECT Rand() * 100))
+
+    EXEC InsertCart
+    @FN = @C_Fname,
+    @LN = @C_Lname,
+    @Birth = @C_DOB,
+    @Prod = @ProdName,
+    @Quan = @Quant,
+    @Date = @CartDate
+
+    SET @Run = @Run - 1
+END
+GO
+
+-- Execute WRAPPER_InsertCart to get 100 rows into tblCART
+EXEC WRAPPER_InsertCart 100
+GO 
+
+--Stored Procedure to insert into tblORDER and tblORDER_PRODUCT, and complete the checkout process
+CREATE PROCEDURE Insert_Order_OrderProduct
+@Cu_FName VARCHAR(50),
+@Cu_LName VARCHAR(50),
+@Cu_DOB date
+AS 
+
+DECLARE @Cu_ID INT, @Order_Date Date, @O_ID INT
+
+EXEC GetCustomerID
+@F = @Cu_FName,
+@L = @Cu_LName,
+@DOB = @Cu_DOB,
 @C_ID = @Cu_ID OUTPUT
 
 If @Cu_ID is null
@@ -155,22 +198,48 @@ BEGIN
     Throw 54378, '@Cust_ID cannot be null',1;
 END
 
+SET @Order_Date = GetDate()
+
 BEGIN TRANSACTION T1
-INSERT INTO tblORDER_PRODUCT(OrderID, ProductID)
-SELECT ProductID
-FROM tblCART
-WHERE CustomerID = @Cu_ID
     BEGIN TRANSACTION T2
-DELETE FROM tblCART
-WHERE CustomerID = @Cu_ID
-    COMMIT TRANSACTION T2
-IF @@TRANCOUNT <> 1
-    BEGIN
-        ROLLBACK TRANSACTION T1
-    END
-ELSE
+        INSERT INTO tblORDER(OrderDate, CustomerID)
+        VALUES (@Order_Date, @Cu_ID)
+        SET @O_ID = (SELECT SCOPE_IDENTITY())
 
-    COMMIT TRANSACTION T1
+        INSERT INTO tblORDER_PRODUCT(OrderID, ProductID, Quantity)
+        SELECT @O_ID, ProductID, SUM(Quantity)
+        FROM tblCART
+        WHERE CustomerID = @Cu_ID
+        GROUP BY ProductID
+        IF @@ERROR <> 0
+            BEGIN
+                PRINT 'Insertion has failed. Transaction rolling back.'
+                ROLLBACK TRANSACTION T2
+            END
+        ELSE
+            COMMIT TRANSACTION T2
 
-/*INSERT INTO tblORDER (OrderDate, CustomerID)
-VALUES (@CheckoutDate, @Cu_ID)*/
+    BEGIN TRANSACTION T3
+        DELETE FROM tblCART WHERE CustomerID = @Cu_ID
+    COMMIT TRANSACTION T3
+
+    IF @@TRANCOUNT <> 1 OR @@ERROR <> 0
+        BEGIN
+            PRINT 'The transaction or error count is above expected. Transaction rolling back.'
+            ROLLBACK TRANSACTION T1
+        END
+    ELSE
+        COMMIT TRANSACTION T1
+    GO
+
+--Testing the Stored Procedure
+EXEC Insert_Order_OrderProduct
+@Cu_FName = 'Felicita',
+@Cu_LName = 'Collins',
+@Cu_DOB = '1980-10-14'
+
+Select * From tblORDER -- The order has been processed for the CustomerID belonging to Felicita.
+Select * From tblCART Where CustomerID = 55 -- The cart for Felicita has been successfully deleted.
+Select * From tblORDER_PRODUCT -- The Order_Product table has been successfully updated.
+
+
